@@ -21,6 +21,7 @@
 | `targets_found` / `summary` | ✅ 有 | 不变 | **今天就有** |
 | `installs[].findings[]` | ✅ 有（`id` / `severity` / `title` / `detail`） | 不变，作为证据的**引用目标** | **今天就有** |
 | `installs[].tier` / `tier_label` / `tier_reason` | ✅ **有**（每个 install 一份） | `tier_reason` 转枚举，中文挪到 `tier_reason_text` | **今天就有** |
+| **`installs[].axes`（七轴）** | ✅ **有**，判断依据全在这（§3.1） | 不变；两形态差异已文档化 | **今天就有** |
 | `overrides.files[]` | ✅ 有（含 `effect`） | 不变，作为引用目标 | **今天就有** |
 | `docker[].verdict_reason` | ✅ 有 | 不变 | **今天就有** |
 | `docker[].tier` | ❌ **没有** | 补上，与 `installs[]` 对齐 | 🎯 **目标** |
@@ -123,6 +124,55 @@
 
 → **所以 CI 判总闸一律用顶层 `verdict`，不要去找顶层 `tier`。**
 → 单机分支细节（为什么是 orange）才去看 `installs[].tier`。
+
+### 3.1 `axes` —— 真正的判断依据在这里（v0.1 已有，但一直没写进契约）
+
+`tier` 只是聚合结果。**为什么会是这个结果，全在 `installs[i].axes` 里 —— 七个轴，每轴一个 `state` + 一个 `detail`。**
+
+```json
+{
+  "axes": {
+    "version":                {"state": "patched",        "detail": "8.5.12"},
+    "patch_composition":      {"state": "pr22113_absent", "detail": "…PR#22113 未合并…"},
+    "upload_progress":        {"state": "enabled",        "detail": "session.upload_progress.enabled=1"},
+    "lfi_exposure":           {"state": "sink_found",     "detail": "…2 处可疑 include/文件读取…"},
+    "serializer_reset":       {"state": "not_applicable", "detail": "FPM 跨请求残留状态…"},
+    "fatal_error_backtraces": {"state": "on",             "detail": "仅 8.5.x；须为 0"},
+    "opcache":                {"state": "covered",        "detail": "…"}
+  }
+}
+```
+
+**位置**：只在 `installs[i].axes`。**顶层没有，`docker[i]` 也没有**（容器只给 `verdict` + `verdict_reason` + `facts`）。
+
+**`state` 是枚举，`detail` 是自由文本。** 要统计就读 `state`，要给人看才读 `detail`。
+
+#### 七轴的 `state` 取值全表（逐条对过代码）
+
+| 轴 | `audit.sh` 取值 | 含义 |
+|:--|:--|:--|
+| `version` | `affected` / `patched` / `unknown` | 版本是否在受影响区间 |
+| `patch_composition` | `pr22113_present` / `pr22113_absent` / `unknown` | 二进制里有没有 PR#22113 等价守卫 |
+| `upload_progress` | `enabled` / `disabled` | `session.upload_progress.enabled` |
+| `lfi_exposure` | `sink_found` / `not_scanned` / `no_sink_found` | 站点有没有 LFI 落点 |
+| `serializer_reset` | `covered` / `leaks` / `not_applicable` / `unknown` | FPM 跨请求残留 |
+| `fatal_error_backtraces` | `on` / `off` / `not_applicable` / `unknown` | 8.5.x 专有指令 |
+| `opcache` | `covered` / `needs_patch` / `off` | OPcache 共享内存那条臂 |
+
+`no_sink_found` 和 `not_scanned` **必须是两个值** —— 一个是「扫了没有」，一个是「没扫成」，混起来等于骗人。
+
+#### ⚠️ 两形态的 `axes` 不完全一样（三处差异）
+
+| 轴 | `audit.sh` | `probe.php` |
+|:--|:--|:--|
+| `version` | `affected` / `patched` / `unknown` | 多一个 **`below_affected`**（版本低于公告区间） |
+| `patch_composition` | 三值，含 **`pr22113_present`** | **只有 `pr22113_absent` / `unknown`** —— probe 读不到包补丁列表，永远不会报 present |
+| `lfi_exposure` | 三值 + `detail` | 三值 + `detail` + **多一个 `sinks` 数组**（具体落点清单） |
+
+**写集成的人必读**：
+- 拿 `probe.php` 去找 `axes.patch_composition.state == "pr22113_present"` → **永远找不到**
+- 拿 `audit.sh` 去找 `axes.version.state == "below_affected"` → **永远找不到**
+- 想吃 LFI 落点明细 → 只有 `probe.php` 的 `axes.lfi_exposure.sinks` 有；`audit.sh` 只在 `detail` 里给个数字
 
 ---
 
