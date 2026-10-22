@@ -225,15 +225,11 @@ php-exposure-audit v0.1.0   CVE-2026-109618 / CVE-2026-109619 (CVSS 9.2)
 
   "verdict": "patched_with_residual",   // 见下表
   "verdict_label_zh": "已修但有残留",
-  "verdict_reason": "version_in_vulnerable_range",
-  "confidence": "high",
   "exit_code": 0,
   "action": "...",
 
-  // 三档判定由七轴聚合而来。每台机器报各自的 tier，顶层报最坏的那一档。
-  "tier": "orange",                  // red | orange | yellow | unknown
-  "tier_label": "已修但有残留",
-  "tier_reason": "版本已修，但站点存在 LFI 落点 —— Chain A 可打，与版本无关",
+  // 三档判定（tier）不在顶层 —— 每台 PHP 各自报一份，放在 installs[] 里。
+  // 顶层只有聚合后的 verdict。docker 条目目前不带 tier（v0.2 补）。
 
   // 这次到底查到东西没有。0 = 一个 PHP 目标都没找到，
   // 此时 verdict 必然是 not_applicable、退出码 2。
@@ -250,9 +246,12 @@ php-exposure-audit v0.1.0   CVE-2026-109618 / CVE-2026-109619 (CVSS 9.2)
       "zend_version": "4.5.11",
       "build_date": "Oct 21 2026 00:26:24",
       "package": { "manager": "none|dpkg|rpm", "name": "", "version": "" },
-      "verdict": "affected",
-      "verdict_reason": "version_in_vulnerable_range",
+      "verdict": "patched",
+      "verdict_reason": "backport_marker_present",
       "confidence": "high",
+      "tier": "orange",                 // red | orange | yellow | unknown
+      "tier_label": "已修但有残留",
+      "tier_reason": "版本已修，但站点存在 LFI 落点 —— Chain A 可打，与版本无关",
       "backport": {
         "marker_state": "absent_conclusive",   // present | absent_conclusive | inconclusive
         "package_changelog": ""
@@ -318,7 +317,17 @@ php-exposure-audit v0.1.0   CVE-2026-109618 / CVE-2026-109619 (CVSS 9.2)
 
 一台机器上装了多个 PHP 时按最坏档取：red > orange > unknown > yellow。容器里的 PHP 也算。
 
-**「已修但有残留」退出码是 0，这是刻意的。** 它表示「版本这条轴过了」，不是「安全」。CI 里别拿退出码当放行依据，要看 `tier`。
+**「已修但有残留」退出码是 0，这是刻意的。** 它表示「版本这条轴过了」，不是「安全」。CI 里别拿退出码当放行依据，**要看顶层 `verdict`**：
+
+| 顶层 `verdict` | `exit_code` | CI 该怎么处理 |
+|:--|:--:|:--|
+| `patched_mitigated` | `0` | 可以放行 |
+| `patched_with_residual` | `0` | **不能放行**，需要人看一眼（链子还通） |
+| `affected` | `1` | 拦下 |
+| `unknown` / `not_applicable` | `2` | 拦下并人工确认 |
+
+多 PHP 的主机上，单机细节看 `installs[].tier`（`red` / `orange` / `yellow` / `unknown`）和 `installs[].tier_label`。
+**注意**：`tier` 只出现在 `installs[]` 里，**顶层没有**；`docker` 条目目前也不带 `tier`（v0.2 补）。所以 CI 判总闸一律用顶层 `verdict`，不要去找顶层 `tier`。
 
 ---
 
