@@ -487,7 +487,7 @@ export PEA_TOKEN="$(head -c 24 /dev/urandom | base64 | tr -d '/+=' | head -c 32)
 echo "$PEA_TOKEN" > .pea-token
 docker-compose up -d
 
-./selftest.sh            # 期望 21 PASS / 0 FAIL
+./selftest.sh            # 期望 31 PASS / 0 FAIL
 docker-compose down -v
 ```
 
