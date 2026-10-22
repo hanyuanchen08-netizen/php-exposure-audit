@@ -1,0 +1,34 @@
+MIT License
+
+Copyright (c) 2026 路星野 (Nero)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+第三方组件说明：
+
+本仓库的**自有代码**（audit.sh / probe.php / README / SELF-TEST）以上述 MIT
+条款发布。以下为**仅参考、未内联**的外部资料，各自适用其原始许可：
+
+- CVE-2026-109618 / 109619 的技术描述与缓解建议来自
+  PHP 官方公告、CERT-EU 2026-018、NCSC-NL（TLP:CLEAR，EUPL-1.2）。
+  本仓库不包含其代码，仅在文档中引用。
+- 未包含任何 GPL-3.0 代码。
+- 未包含任何无许可证（License: None）仓库的代码。

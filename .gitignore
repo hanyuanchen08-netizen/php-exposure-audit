@@ -1,0 +1,6 @@
+# 靶场运行期产物
+lab/webroot/probe.php
+lab/webroot/.audit-token
+lab/selftest-*.log
+*.bak.*
+lab/.pea-token

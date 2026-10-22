@@ -1,0 +1,13 @@
+# 模拟真实事故现场：某个 legacy 站点的 .htaccess 把 upload_progress 又打开了
+# 工具必须能报出来（NCSC 脚本专门扫的就是这个）
+<IfModule mod_php7.c>
+  php_flag session.upload_progress.enabled On
+  php_value memory_limit 64M
+  php_value post_max_size 512M
+</IfModule>
+
+<IfModule mod_php.c>
+  php_flag session.upload_progress.enabled On
+  php_value memory_limit 64M
+  php_value post_max_size 512M
+</IfModule>

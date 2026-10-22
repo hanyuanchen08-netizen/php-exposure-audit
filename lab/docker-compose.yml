@@ -1,0 +1,46 @@
+# 验证靶场 —— 只跑在本机，不对外暴露。
+#
+#   vuln   : PHP 8.5.11 + Apache mod_php  → 期望判 affected
+#   fixed  : PHP 8.5.12 + Apache mod_php  → 期望判 patched
+#
+# 两份用同一个 webroot 和同一份 php.ini，把唯一变量压到「PHP 版本」上。
+#
+# 注意：不能把 probe.php 单独 bind-mount 到 docroot 里，
+# 和 webroot 整目录挂载会抢同一个挂载点（runc: create mountpoint: file exists）。
+# 改成把项目目录只读挂到 /opt/pea，容器启动时复制进去。
+services:
+  vuln:
+    image: ${PHP_IMAGE_811:-docker.m.daocloud.io/library/php:8.5.11-apache}
+    container_name: pea-lab-vuln
+    ports: ["18091:80"]
+    environment:
+      PHP_EXPOSURE_AUDIT_TOKEN: ${PEA_TOKEN:?set PEA_TOKEN}
+    volumes:
+      - ./webroot:/var/www/html
+      - ./php.ini:/usr/local/etc/php/php.ini:ro
+      - ../:/opt/pea:ro
+    command: >
+      bash -c "cp /opt/pea/probe.php /var/www/html/probe.php && apache2-foreground"
+    healthcheck:
+      test: ["CMD", "php", "-r", "exit(0);"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  fixed:
+    image: ${PHP_IMAGE_812:-docker.m.daocloud.io/library/php:8.5.12-apache}
+    container_name: pea-lab-fixed
+    ports: ["18092:80"]
+    environment:
+      PHP_EXPOSURE_AUDIT_TOKEN: ${PEA_TOKEN:?set PEA_TOKEN}
+    volumes:
+      - ./webroot:/var/www/html
+      - ./php.ini:/usr/local/etc/php/php.ini:ro
+      - ../:/opt/pea:ro
+    command: >
+      bash -c "cp /opt/pea/probe.php /var/www/html/probe.php && apache2-foreground"
+    healthcheck:
+      test: ["CMD", "php", "-r", "exit(0);"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
