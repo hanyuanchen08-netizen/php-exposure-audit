@@ -121,25 +121,73 @@ grep -oE '[0-9]+ PASS' README.md   # README 声明
 
 ---
 
-## 7. 部署
+## 7. 部署与投递（2026-10-25 对端定）
 
-脚本：`scripts/patrol.sh`（不自己装 cron，装不装由人定）。
+- **cron 的建/改/删是对端的活，白也不碰。**
+  权限事实：cron 唤醒的轮次里 add/update/remove 会被系统拒绝，并把整轮标成 error——
+  `memory-daily-update` 连挂 9 次就是这个原因，不是任务写错。
+- **时间：19:30，每天一次**（不是 21:00）。21:00 只剩三小时补救，而且人已经不想动代码；
+  19:30 是晚饭后，白天的事收完，还来得及真做一件。
+  **一个只能在「已经来不及」的时候响的提醒，会训练人忽略它。**
+- **报给仓库主人，不报给执行人。**
+- **已装（2026-10-25）**：`job bdb229e2` · 每天 **19:30** · 报仓库主人。
+  装之前端到端验过四个场景（正常 / 声明漂 / 多处矛盾 / 测试红），
+  **所以文档原先写的「先手动跑三天」由这四个场景替代** —— 验过再装，比装上去等它误报省时间。
+- **cron 判据**（不是简单地每天推一条）：
+  `s=$(patrol.sh --brief)`，若 `today_fact=yes` 且退出码 0 → **无输出，不投递**；
+  否则跑 `--notify` 出六行模板。**有提交就闭嘴，没提交才说话。**
 
 ```bash
+./scripts/patrol.sh --notify        # 六行模板（投递用）
 ./scripts/patrol.sh                 # 全量报告（人看）
-./scripts/patrol.sh --brief         # 一行结论（cron 用）
+./scripts/patrol.sh --brief         # 一行（机器扫）
 ./scripts/patrol.sh candidates      # 只出今天的三条候选
 ./scripts/patrol.sh claims          # 只核 README 数字
 ./scripts/patrol.sh ack "理由"      # 声明今天空档
 ```
 
-cron 示例（每天 09:00，退出码 2 时才提醒）：
+cron（由 owner 装；退出码 2 = 需要人看一眼）：
 
 ```cron
-0 9 * * * cd /path/to/php-exposure-audit && ./scripts/patrol.sh || [ $? -ne 2 ] || ./scripts/patrol.sh --brief
+30 19 * * * cd /path/to/php-exposure-audit && ./scripts/patrol.sh --notify
 ```
 
----
+### 7.1 六行模板（对端定的形状）
+
+```
+📌 今日维护 · 10-25（周六）· 断更 0 天
+
+提交：✅ 6c0e6e8 + db74848（2 条都带 Fact:）
+数字：README 31 PASS == 实测 31
+昨日：★0 fork0 issue0
+```
+
+没有提交时，第 3 行换成「提交：❌ 今日无」，并补一行候选：
+
+```
+📌 今日维护 · 10-26（周一）· 断更 1 天
+
+提交：❌ 今日无
+数字：README 31 PASS == 实测 31
+昨日：★0 fork0 issue0
+候选：NOOP-HONESTY docs/PATROL.md · LFI-CHAIN-MULTIHOP audit.sh:962 · LFI-HEAD3 audit.sh:948
+```
+
+**四条硬规矩**
+
+1. 候选必须带文件路径——不带路径的候选等于「你去做点事」，等于没给方向
+2. 断更天数放第一行——扫一眼就知道紧不紧
+3. 「数字」那行永远在——它不是给断更用的，是每天都该检的
+4. 不超过 6 行——超了就不看
+
+`昨日：` 那行由取数方注入，两种都行：
+
+```bash
+PATROL_STATS="★0 fork0 issue0" ./scripts/patrol.sh --notify
+echo '★0 fork0 issue0' > .patrol/stats      # 之后每次自动带上
+```
+
+**脚本自己不联网。** 星标 / fork / issue 不是它能拿的东西——拿不到就空着，不编一个 0 上去。
 
 ## 8. 今天的账（2026-10-25）
 
@@ -148,5 +196,7 @@ cron 示例（每天 09:00，退出码 2 时才提醒）：
 | 立项 + 巡检脚本 + BACKLOG | ✅ 本轮（未提交，`git status` 三行未跟踪 + 一行 .gitignore） |
 | `SELFTEST-README-COUNT` 断言 | 🔄 对端认领，今天落 |
 | v0.2 = LFI 数据流追踪 | 📌 立项方向，第一刀 = `LFI-CHAIN-MULTIHOP`（已进 BACKLOG） |
+| `--notify` 六行模板 | ✅ 本轮落进 `scripts/patrol.sh`（今日两条 Fact 各跑过一次） |
+| cron 19:30 由对端装 | 🔄 owner = 对端；白也只产内容，不碰调度 |
 
 **日常更新是养 v0.2 的料，不是目的。**
