@@ -27,6 +27,12 @@ fi
 # 昨日 Fact 条数走 patrol.sh 自己的 --yesterday-facts ——
 # 「事实级」在全仓只能有一个定义（is_fact_level 会排除「带 Fact: 但 diff 为空」的纯格式改动）。
 # 这里原来用 python 另算一套，两套口径早晚对不上。
-yf=$(bash scripts/patrol.sh --yesterday-facts 2>/dev/null || echo 0)
-
-PATROL_STATS="+${yf} 条 Fact" bash scripts/patrol.sh --notify
+yf=$(bash scripts/patrol.sh --yesterday-facts 2>/dev/null)
+# 拿不到就不注入 —— `|| echo 0` 会把「python 不在 / git 出错 / 目录不对」任何一种失败
+# 都变成 `+0 条 Fact`，一个看起来完全正常的数字。
+# ★ 拿不到你能看出是空的，`+0` 看不出来。
+if [ -n "${yf:-}" ] && printf '%s' "$yf" | grep -qE '^[0-9]+$'; then
+	PATROL_STATS="+${yf} 条 Fact" bash scripts/patrol.sh --notify
+else
+	bash scripts/patrol.sh --notify
+fi
