@@ -373,7 +373,7 @@ printf '结果: %d PASS / %d FAIL\n' "$PASS" "$FAIL"
 # declared_all 那行的「|| true」是防将来有人加 set -e —— 那会让 grep 无命中时直接退出，
 # 正好在最该报警的那条路径上静默失效。
 meta_rc=0
-declared_all=$(grep -oE '[0-9]+[[:space:]]+PASS' ../README.md 2>/dev/null | grep -oE '^[0-9]+' | sort -u || true)
+declared_all=$(grep -oE '期望[[:space:]]*[0-9]+[[:space:]]*PASS' ../README.md 2>/dev/null | grep -oE '[0-9]+' | sort -u || true)
 if [ -z "${declared_all:-}" ]; then
 	printf '  [FAIL] README 里找不到「N PASS」这句声明\n'
 	meta_rc=2

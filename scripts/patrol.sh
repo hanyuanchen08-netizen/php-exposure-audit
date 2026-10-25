@@ -253,7 +253,17 @@ notify() {
 	[ -z "$stats" ] && [ -f "$STATE_DIR/stats" ] && stats=$(head -1 "$STATE_DIR/stats")
 	[ -n "$stats" ] && printf '昨日：%s\n' "$stats"
 
-	[ "$n" -eq 0 ] && printf '候选：%s\n' "$(candidates_oneline 3)"
+	if [ "$n" -eq 0 ]; then
+		local cline ncan
+		cline=$(candidates_oneline 3)
+		ncan=$(cand_rows 3 | grep -c . || true); ncan=${ncan:-0}
+		# 承诺是「断更时给三条」。池子不够就必须自己说出来，不能默默少给。
+		if [ "$ncan" -lt 3 ]; then
+			printf '候选：%s（只有 %s 条 open，BACKLOG 该补了）\n' "$cline" "$ncan"
+		else
+			printf '候选：%s\n' "$cline"
+		fi
+	fi
 
 	[ "$state" = alert ] && rc=2
 	return $rc
