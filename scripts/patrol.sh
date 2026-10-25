@@ -75,16 +75,35 @@ last_fact_commit() { # -> "sha<TAB>date<TAB>subject"
 	done | head -1
 }
 
+weekday_cn() { # $1=YYYY-MM-DD -> 一二三四五六日
+	local u
+	if date -j -f '%Y-%m-%d' "$1" +%u >/dev/null 2>&1; then
+		u=$(date -j -f '%Y-%m-%d' "$1" +%u)
+	else
+		u=$(date -d "$1" +%u)
+	fi
+	case $u in 1) echo 一;; 2) echo 二;; 3) echo 三;; 4) echo 四;; 5) echo 五;; 6) echo 六;; *) echo 日;; esac
+}
+
 # ---------------------------------------------------------------- 数字核 ---
 # 一条数字能写进对外文案，当且仅当给出那条命令别人只能得到一个结果（MAINTAINING §7）。
 # 这里只核最容易被手抄错的那条：README 声明的 PASS 数。
 
+claims_values() { # 副作用：CV_ACTUAL / CV_FAIL / CV_DECLARED / CV_DECLARED_ALL / CV_NDECL
+	CV_ACTUAL=$(grep -cE '\[PASS\]' SELF-TEST.md 2>/dev/null | tr -d '\n'); CV_ACTUAL=${CV_ACTUAL:-0}
+	CV_FAIL=$(grep -cE '\[FAIL\]' SELF-TEST.md 2>/dev/null | tr -d '\n'); CV_FAIL=${CV_FAIL:-0}
+	# 只认「声明」形态（期望 N PASS）。裸的「N PASS」会命中正文，
+	# 比如文档里写「grep 数出 35 PASS，是假的」这种句子——那不是声明，不能参与比对。
+	CV_DECLARED_ALL=$(grep -oE '期望[[:space:]]*[0-9]+[[:space:]]*PASS' README.md 2>/dev/null \
+		| grep -oE '[0-9]+' | sort -u)
+	CV_NDECL=$(printf '%s' "$CV_DECLARED_ALL" | grep -c . || true); CV_NDECL=${CV_NDECL:-0}
+	CV_DECLARED=$(printf '%s\n' "$CV_DECLARED_ALL" | head -1)
+}
+
 claims() { # -> 0 ok / 2 mismatch
 	local actual fail declared rc=0 n
-	actual=$(grep -cE '\[PASS\]' SELF-TEST.md 2>/dev/null | tr -d '\n')
-	fail=$(grep -cE '\[FAIL\]' SELF-TEST.md 2>/dev/null | tr -d '\n')
-	actual=${actual:-0}; fail=${fail:-0}
-	declared=$(grep -oE '[0-9]+[[:space:]]+PASS' README.md 2>/dev/null | grep -oE '^[0-9]+' | sort -u)
+	claims_values
+	actual=$CV_ACTUAL; fail=$CV_FAIL; declared=$CV_DECLARED_ALL
 
 	printf 'SELF-TEST 实测: [PASS]=%s  [FAIL]=%s\n' "$actual" "$fail"
 	if [ "$fail" != "0" ]; then
@@ -92,8 +111,14 @@ claims() { # -> 0 ok / 2 mismatch
 		rc=2
 	fi
 	if [ -z "$declared" ]; then
-		printf '⚠️  README 里没找到「N PASS」声明（口径变了？）\n'
+		printf '⚠️  README 里没找到「期望 N PASS」声明（口径变了？）\n'
 		return 1
+	fi
+	if [ "${CV_NDECL:-0}" -gt 1 ]; then
+		printf '❌ README 里有 %s 处不一致的声明: %s —— 只能有一个值\n' \
+			"$CV_NDECL" "$(printf '%s ' $declared)"
+		printf '   对外文案只能有一个数，两个都\"对\"就是错\n'
+		rc=2
 	fi
 	for n in $declared; do
 		if [ "$n" = "$actual" ]; then
@@ -109,10 +134,9 @@ claims() { # -> 0 ok / 2 mismatch
 }
 
 # ---------------------------------------------------------------- 候选 ---
-# BACKLOG.md 格式见该文件头。按日期轮转，保证同一天给的是同一组三条，
-# 但不会一个月都是同三条。
+# BACKLOG.md 格式见该文件头。按日期轮转：同一天稳定同一组，跨日换人。
 
-pick_candidates() { # $1=n
+cand_rows() { # $1=n -> id<TAB>title<TAB>files<TAB>why<TAB>verify
 	local n=${1:-$CANDIDATES} i idx total day
 	# 注意: 标量名不能和数组同名（bash 里 read 进数组变量会写到 [0]）
 	local -a c_id c_title c_files c_why c_verify
@@ -140,22 +164,99 @@ pick_candidates() { # $1=n
 	' BACKLOG.md)
 
 	total=${#c_id[@]}
-	[ "$total" -gt 0 ] || { printf '（BACKLOG.md 里没有 open 条目——那本身就是今天该补的事）\n'; return 0; }
-
+	[ "$total" -gt 0 ] || return 1
 	day=$(day_of_year "$NOW")
 	[ "$n" -gt "$total" ] && n=$total
 	for ((i = 0; i < n; i++)); do
 		idx=$(( (day + i) % total ))
 		[ "$idx" -lt 0 ] && idx=$(( idx + total ))
-		printf '%d. %s — %s\n   files: %s\n   %s\n   复核: %s\n' \
-			"$((i + 1))" "${c_id[$idx]}" "${c_title[$idx]}" "${c_files[$idx]}" "${c_why[$idx]}" "${c_verify[$idx]}"
+		printf '%s\t%s\t%s\t%s\t%s\n' \
+			"${c_id[$idx]}" "${c_title[$idx]}" "${c_files[$idx]}" "${c_why[$idx]}" "${c_verify[$idx]}"
 	done
+}
+
+pick_candidates() { # $1=n  逐条详版（人看）
+	local i=0 rows
+	rows=$(cand_rows "${1:-$CANDIDATES}") || { printf '（BACKLOG.md 里没有 open 条目——那本身就是今天该补的事）\n'; return 0; }
+	while IFS=$'\t' read -r id title files why verify; do
+		[ -n "$id" ] || continue
+		i=$((i + 1))
+		printf '%d. %s — %s\n   files: %s\n   %s\n   复核: %s\n' \
+			"$i" "$id" "$title" "$files" "$why" "$verify"
+	done <<<"$rows"
+}
+
+candidates_oneline() { # $1=n  -> "ID 路径 · ID 路径 · ID 路径"（六行模板用）
+	local out='' first rows
+	rows=$(cand_rows "${1:-3}") || return 0
+	while IFS=$'\t' read -r id title files why verify; do
+		[ -n "$id" ] || continue
+		first=${files%%,*}          # 只取第一处路径，模板要求一行放得下
+		first=$(printf '%s' "$first" | sed 's/[[:space:]]*$//')
+		out="$out$id $first · "
+	done <<<"$rows"
+	printf '%s' "${out% · }"
 }
 
 print_candidates() {
 	printf '\n今天可以做的（%d 条，带路径）：\n' "$CANDIDATES"
 	pick_candidates "$CANDIDATES"
 	printf '\n挑一条做，或告诉我今天真没有。**「没有」也是答案**，但要落盘：./scripts/patrol.sh ack "理由"\n'
+}
+
+# ---------------------------------------------------------------- 六行模板 ---
+# 对端 2026-10-25 定的形状，四条硬规矩：
+#   1. 候选必须带文件路径（不带路径 = 「你去做点事」= 没给方向）
+#   2. 断更天数在第一行（扫一眼就知道紧不紧）
+#   3. 「数字」那行永远在（不是给断更用的，是每天都该检的）
+#   4. 不超过 6 行（超了就不看）
+# 「昨日」那行由取数方注入（PATROL_STATS 或 .patrol/stats 首行）——
+# 本脚本不联网，星标/fork/issue 不是它能自己拿的东西。
+
+notify() {
+	local mmdd wd n shown stats cline rc=0
+	mmdd=${NOW#*-}                      # YYYY-MM-DD -> MM-DD
+	wd=$(weekday_cn "$NOW")
+
+	shown=$(git log --since="$NOW 00:00:00" --until="$NOW 23:59:59" --format='%h' 2>/dev/null \
+		| while read -r s; do [ -n "$s" ] && is_fact_level "$s" && echo "$s"; done)
+	n=$(printf '%s' "$shown" | grep -c . || true)
+	n=${n:-0}
+
+	printf '📌 今日维护 · %s（周%s）· 断更 %s 天\n\n' "$mmdd" "$wd" "$days"
+
+	if [ "$n" -gt 0 ]; then
+		local list
+		# 按时间正序显示（最近的放最后），和「6c0e6e8 + db74848」这种读法一致
+		list=$(printf '%s\n' "$shown" | awk '{a[NR]=$0} END {for (i=NR; i>0; i--) print a[i]}' \
+			| head -3 | paste -sd'+' - | sed 's/+/ + /g')
+		[ "$n" -gt 3 ] && list="$list +$((n - 3))"
+		printf '提交：✅ %s（%s 条都带 Fact:）\n' "$list" "$n"
+	else
+		printf '提交：❌ 今日无\n'
+	fi
+
+	claims_values
+	if [ "${CV_FAIL:-0}" != 0 ]; then
+		printf '数字：❌ SELF-TEST 有 %s 条 FAIL\n' "$CV_FAIL"; rc=2
+	elif [ -z "${CV_DECLARED:-}" ]; then
+		printf '数字：⚠️ README 里读不到「N PASS」声明\n'; rc=1
+	elif [ "${CV_NDECL:-0}" -gt 1 ]; then
+		printf '数字：❌ README 有 %s 处不一致声明（%s）\n' "$CV_NDECL" "$(printf '%s ' $CV_DECLARED_ALL)"; rc=2
+	elif [ "$CV_DECLARED" = "$CV_ACTUAL" ]; then
+		printf '数字：README %s PASS == 实测 %s\n' "$CV_DECLARED" "$CV_ACTUAL"
+	else
+		printf '数字：❌ README 声明 %s ≠ 实测 %s\n' "$CV_DECLARED" "$CV_ACTUAL"; rc=2
+	fi
+
+	stats=${PATROL_STATS:-}
+	[ -z "$stats" ] && [ -f "$STATE_DIR/stats" ] && stats=$(head -1 "$STATE_DIR/stats")
+	[ -n "$stats" ] && printf '昨日：%s\n' "$stats"
+
+	[ "$n" -eq 0 ] && printf '候选：%s\n' "$(candidates_oneline 3)"
+
+	[ "$state" = alert ] && rc=2
+	return $rc
 }
 
 # ---------------------------------------------------------------- 主流程 ---
@@ -227,6 +328,11 @@ fi
 
 today_fact=no
 [ -n "${last_date:-}" ] && [ "$last_date" = "$NOW" ] && today_fact=yes
+
+if [ "$cmd" = '--notify' ]; then
+	notify
+	exit $?
+fi
 
 # ---- brief ----
 if [ "$brief" = 1 ]; then
