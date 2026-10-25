@@ -118,7 +118,7 @@ claims() { # -> 0 ok / 2 mismatch
 		printf '❌ README 里有 %s 处不一致的声明: %s —— 只能有一个值\n' \
 			"$CV_NDECL" "$(printf '%s ' $declared)"
 		printf '   对外文案只能有一个数，两个都\"对\"就是错\n'
-		rc=2
+		return 2
 	fi
 	for n in $declared; do
 		if [ "$n" = "$actual" ]; then
