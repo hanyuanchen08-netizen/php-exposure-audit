@@ -367,3 +367,19 @@ echo '  pea-nophp 已删除'
 hr
 printf '结果: %d PASS / %d FAIL\n' "$PASS" "$FAIL"
 [ "$FAIL" = 0 ] || exit 1
+
+# 元检查：README 对外声明的数字必须等于本次实跑数。
+# 不计入 PASS 计数（否则自指：加一条就把 31 变成 32）。
+# 声明和实测不一致，说明对外说的和代码做的是两件事——比任何单条断言失败都严重。
+declared=$(grep -oE '期望 [0-9]+ PASS' ../README.md 2>/dev/null | head -1 | grep -oE '[0-9]+')
+if [ -z "${declared:-}" ]; then
+	printf '  [FAIL] README 里找不到「期望 N PASS」这句声明\n'
+	exit 2
+fi
+if [ "$declared" != "$PASS" ]; then
+	printf '  [FAIL] README 声明 %s PASS，实跑 %s —— 数字漂了\n' "$declared" "$PASS"
+	printf '         要么把 README 改成 %s，要么查清为什么差 %s 条\n' \
+		"$PASS" "$((PASS - declared))"
+	exit 2
+fi
+printf '  [OK]   README 声明 %s PASS == 实跑 %s\n' "$declared" "$PASS"
