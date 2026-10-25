@@ -24,14 +24,9 @@ if [ "$rc" -eq 0 ] && printf '%s' "$s" | grep -q 'today_fact=yes'; then
 	exit 0    # 今天有提交，且没有断更/数字漂 → 闭嘴
 fi
 
-yf=$(python3 -c "
-import subprocess, datetime as D
-t = D.date.today()
-a = str(t - D.timedelta(days=1)) + ' 00:00'
-b = str(t) + ' 00:00'
-o = subprocess.run(['git', 'log', '--since', a, '--until', b, '--format=%B'],
-                   capture_output=True, text=True).stdout
-print(sum(1 for l in o.splitlines() if l.startswith('Fact:')))
-" 2>/dev/null || echo 0)
+# 昨日 Fact 条数走 patrol.sh 自己的 --yesterday-facts ——
+# 「事实级」在全仓只能有一个定义（is_fact_level 会排除「带 Fact: 但 diff 为空」的纯格式改动）。
+# 这里原来用 python 另算一套，两套口径早晚对不上。
+yf=$(bash scripts/patrol.sh --yesterday-facts 2>/dev/null || echo 0)
 
 PATROL_STATS="+${yf} 条 Fact" bash scripts/patrol.sh --notify

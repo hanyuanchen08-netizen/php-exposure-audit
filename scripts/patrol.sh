@@ -43,6 +43,14 @@ epoch_of() { # $1=YYYY-MM-DD
 	fi
 }
 
+prev_day() { # $1=YYYY-MM-DD -> 前一天
+	if date -j -v-1d -f '%Y-%m-%d' "$1" +%F >/dev/null 2>&1; then
+		date -j -v-1d -f '%Y-%m-%d' "$1" +%F
+	else
+		date -d "$1 -1 day" +%F
+	fi
+}
+
 day_of_year() { # $1=YYYY-MM-DD
 	if date -j -f '%Y-%m-%d' "$1" +%j >/dev/null 2>&1; then
 		date -j -f '%Y-%m-%d' "$1" +%j | sed 's/^0*//'
@@ -295,6 +303,19 @@ case $cmd in
 		claims
 		exit $?
 		;;
+
+	--yesterday-facts)
+		# 只输出「昨日 Fact 级提交条数」，供 patrol-cron.sh 注入「昨日：」那行。
+		# 复用 is_fact_level —— 「事实级」在全仓只能有一个定义，
+		# 否则两个地方会各算各的，早晚对不上。
+		y=$(prev_day "$NOW") || exit 1
+		n=0
+		for c in $(git log --since="$y 00:00" --until="$NOW 00:00" --format=%H 2>/dev/null); do
+			[ -n "$c" ] && is_fact_level "$c" && n=$((n + 1))
+		done
+		printf '%s\n' "$n"
+		exit 0
+		;;
 esac
 
 # 下面两种是报告模式
@@ -345,12 +366,27 @@ if [ "$cmd" = '--notify' ]; then
 fi
 
 # ---- brief ----
+# 一行，给 cron 判「要不要说话」。**数字检查在这里也跑**：
+# 否则「今天有 Fact + README 漂了」会因为 brief 只报 today_fact=yes 而被咽掉，
+# 而那正是唯一必须说话的一天（有交付、且对外数字是错的）。
 if [ "$brief" = 1 ]; then
-	printf 'patrol %s %s days=%s today_fact=%s fact14=%s/%s' \
-		"$NOW" "$state" "$days" "$today_fact" "$recent_fact" "$recent_total"
+	claims_values
+	if [ "${CV_FAIL:-0}" != 0 ] || [ "${CV_NDECL:-0}" -gt 1 ]; then
+		cstate=drift
+	elif [ -z "${CV_DECLARED:-}" ]; then
+		cstate=missing
+	elif [ "$CV_DECLARED" != "$CV_ACTUAL" ]; then
+		cstate=drift
+	else
+		cstate=ok
+	fi
+	printf 'patrol %s %s days=%s today_fact=%s claims=%s fact14=%s/%s' \
+		"$NOW" "$state" "$days" "$today_fact" "$cstate" "$recent_fact" "$recent_total"
 	[ -n "$ack_reason" ] && printf ' ack=yes'
 	printf '\n'
-	exit $([ "$state" = alert ] && echo 2 || echo 0)
+	if [ "$state" = alert ] || [ "$cstate" = drift ]; then exit 2; fi
+	if [ "$cstate" = missing ]; then exit 1; fi
+	exit 0
 fi
 
 # ---- 全量 ----
