@@ -17,10 +17,22 @@
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 
+# 静默和「没跑」在投递层长得一模一样（都是 0 字节）。所以每次运行都留一行痕：
+# 时间 / 退出码 / 有没有说话 / 当时 HEAD。明天验收看这个文件，不看「我有没有收到消息」。
+# .patrol/ 已 gitignore。
+LOG=".patrol/last-run"
+log_run() { # $1=rc $2=spoke
+	mkdir -p .patrol 2>/dev/null
+	printf '%s\trc=%s\tspoke=%s\thead=%s\n' \
+		"$(date '+%Y-%m-%dT%H:%M:%S%z')" "$1" "$2" \
+		"$(git rev-parse --short HEAD 2>/dev/null || echo '?')" >> "$LOG"
+}
+
 s=$(bash scripts/patrol.sh --brief 2>/dev/null)
 rc=$?
 
 if [ "$rc" -eq 0 ] && printf '%s' "$s" | grep -q 'today_fact=yes'; then
+	log_run 0 no
 	exit 0    # 今天有提交，且没有断更/数字漂 → 闭嘴
 fi
 
@@ -32,7 +44,9 @@ yf=$(bash scripts/patrol.sh --yesterday-facts 2>/dev/null)
 # 都变成 `+0 条 Fact`，一个看起来完全正常的数字。
 # ★ 拿不到你能看出是空的，`+0` 看不出来。
 if [ -n "${yf:-}" ] && printf '%s' "$yf" | grep -qE '^[0-9]+$'; then
+	log_run "$rc" yes
 	PATROL_STATS="+${yf} 条 Fact" bash scripts/patrol.sh --notify
 else
+	log_run "$rc" yes
 	bash scripts/patrol.sh --notify
 fi
