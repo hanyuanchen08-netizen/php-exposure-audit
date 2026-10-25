@@ -4,3 +4,6 @@ lab/webroot/.audit-token
 lab/selftest-*.log
 *.bak.*
 lab/.pea-token
+
+# 巡检空档声明：记录的是「今天没提交」，不该自己变成提交
+.patrol/
