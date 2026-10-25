@@ -222,7 +222,10 @@ print_candidates() {
 # 本脚本不联网，星标/fork/issue 不是它能自己拿的东西。
 
 notify() {
-	local mmdd wd n shown stats cline rc=0
+	local mmdd wd n shown stats cline rc=0 sha
+	# §9：对外出现的数字要能回答「哪次提交」。没有这一截，播报里的 31 只是
+	# 「某次运行时候的 31」，读到的人无法复跑到同一个仓状态。
+	sha=$(git rev-parse --short HEAD 2>/dev/null || true)
 	mmdd=${NOW#*-}                      # YYYY-MM-DD -> MM-DD
 	wd=$(weekday_cn "$NOW")
 
@@ -252,9 +255,9 @@ notify() {
 	elif [ "${CV_NDECL:-0}" -gt 1 ]; then
 		printf '数字：❌ README 有 %s 处不一致声明（%s）\n' "$CV_NDECL" "$(printf '%s ' $CV_DECLARED_ALL)"; rc=2
 	elif [ "$CV_DECLARED" = "$CV_ACTUAL" ]; then
-		printf '数字：README %s PASS == 实测 %s\n' "$CV_DECLARED" "$CV_ACTUAL"
+		printf '数字：README %s PASS == 实测 %s（HEAD %s）\n' "$CV_DECLARED" "$CV_ACTUAL" "${sha:-?}"
 	else
-		printf '数字：❌ README 声明 %s ≠ 实测 %s\n' "$CV_DECLARED" "$CV_ACTUAL"; rc=2
+		printf '数字：❌ README 声明 %s ≠ 实测 %s（HEAD %s）\n' "$CV_DECLARED" "$CV_ACTUAL" "${sha:-?}"; rc=2
 	fi
 
 	stats=${PATROL_STATS:-}
