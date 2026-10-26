@@ -14,7 +14,8 @@
 #   ./scripts/gh-meta.sh                     # 默认本仓
 #   ./scripts/gh-meta.sh owner/repo          # 指定仓库
 #
-# 注意: 未认证 API 限额 60 次/小时。一次调用就能拿全三个字段，
+# 注意: 未认证 API 限额 60 次/小时（认证 5000）。设了 GITHUB_TOKEN 就自动带上。
+#       一次调用就能拿全三个字段，
 #       不要拆成三次查。核代码内容请用 git clone（走 SSH，零配额）。
 
 set -euo pipefail
@@ -25,7 +26,15 @@ URL="https://api.github.com/repos/${REPO}"
 BODY="$(mktemp)"
 trap 'rm -f "$BODY"' EXIT
 
-CODE="$(curl -sS -o "$BODY" -w '%{http_code}' --max-time 15 "$URL" 2>/dev/null || echo 000)"
+# 有 GITHUB_TOKEN 就带上 —— 匿名 60 次/小时，认证 5000 次/小时。
+# 状态码先验的规矩不因为带了 token 而放松：401/403 照样只报「读取失败」。
+AUTH_HDR=""
+[ -n "${GITHUB_TOKEN:-}" ] && AUTH_HDR="Authorization: Bearer ${GITHUB_TOKEN}"
+if [ -n "$AUTH_HDR" ]; then
+    CODE="$(curl -sS -o "$BODY" -w '%{http_code}' -H "$AUTH_HDR" --max-time 15 "$URL" 2>/dev/null || echo 000)"
+else
+    CODE="$(curl -sS -o "$BODY" -w '%{http_code}' --max-time 15 "$URL" 2>/dev/null || echo 000)"
+fi
 
 if [ "$CODE" != "200" ]; then
     printf '读取失败（HTTP %s）—— 不报对象状态\n' "$CODE"
