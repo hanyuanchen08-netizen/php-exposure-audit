@@ -911,6 +911,9 @@ patch_composition() {
 #
 # 直接式：sink 那一行里就有超全局
 LFI_DIRECT='(include|require)(_once)?[[:space:]]*\(?[[:space:]]*\$_(GET|POST|REQUEST|COOKIE)|(file_get_contents|readfile|fopen)[[:space:]]*\([[:space:]]*\$_(GET|POST|REQUEST|COOKIE)'
+# 每个文件、每种形态最多列多少条。**原来写死 3，第 4 个起全部看不见——
+# 这是假阴性，而且不报「我截断了」。** 现在提到 50，超了会在输出里留一行 truncated。
+LFI_PER_FILE=50
 # 间接式：sink 用变量（变量是否被污染再单独查）
 LFI_INDIRECT='(include|require)(_once)?[[:space:]]*\(?[[:space:]]*\$[A-Za-z_]|(file_get_contents|readfile|fopen)[[:space:]]*\([[:space:]]*\$[A-Za-z_]'
 
@@ -945,14 +948,18 @@ scan_lfi_sinks() {
 				grep -qF 'php-exposure-audit' "$f" 2>/dev/null && continue
 
 				# 1) 直接式
-				grep -nEi "$LFI_DIRECT" "$f" 2>/dev/null | head -3 \
+				nd=$(grep -cEi "$LFI_DIRECT" "$f" 2>/dev/null || true); nd=${nd:-0}
+				grep -nEi "$LFI_DIRECT" "$f" 2>/dev/null | head -"$LFI_PER_FILE" \
 					| while IFS=: read -r ln line; do
 						printf '%s\t%s\tdirect\t%s\n' "$f" "$ln" \
 							"$(printf '%s' "$line" | sed 's/^[[:space:]]*//' | cut -c1-140)"
 					done
+				[ "$nd" -gt "$LFI_PER_FILE" ] && printf '%s\t-\ttruncated\tdirect 命中 %s 处，只列前 %s\n' \
+					"$f" "$nd" "$LFI_PER_FILE"
 
 				# 2) 间接式：sink 用变量，且同文件里该变量来自超全局
-				grep -nEi "$LFI_INDIRECT" "$f" 2>/dev/null | head -3 \
+				ni=$(grep -cEi "$LFI_INDIRECT" "$f" 2>/dev/null || true); ni=${ni:-0}
+				grep -nEi "$LFI_INDIRECT" "$f" 2>/dev/null | head -"$LFI_PER_FILE" \
 					| while IFS=: read -r ln line; do
 						local vname taint src
 						vname=$(printf '%s' "$line" \
@@ -965,6 +972,8 @@ scan_lfi_sinks() {
 						printf '%s\t%s\tindirect(%s)\t%s\n' "$f" "$ln" "$vname" \
 							"$(printf '%s' "$line" | sed 's/^[[:space:]]*//' | cut -c1-110) <= $(printf '%s' "$src" | cut -c1-80)"
 					done
+				[ "$ni" -gt "$LFI_PER_FILE" ] && printf '%s\t-\ttruncated\tindirect 命中 %s 处，只列前 %s\n' \
+					"$f" "$ni" "$LFI_PER_FILE"
 			done >> "$out"
 	done < "$TMPD/lfi.roots"
 	# 最后去重：同一 文件+行 只留一条
