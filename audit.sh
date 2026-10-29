@@ -254,13 +254,17 @@ changelog_hit() {
 			[ -d "$d" ] || continue
 			for f in "$d"/changelog.Debian.gz "$d"/changelog.gz; do
 				[ -r "$f" ] || continue
-				if gzip -dc "$f" 2>/dev/null | head -80 | grep -qiE 'CVE-2026-10961[89]'; then
+				# 不截断：老发行版的 changelog 上千行，CVE 条目常在第 80 行之外。
+				# 以前 head -80 会让「补丁修没修」直接判成「未命中」——假阴性。
+				# grep -q 命中即退，全量扫不比截断慢。
+				if gzip -dc "$f" 2>/dev/null | grep -qiE 'CVE-2026-10961[89]'; then
 					printf '%s\n' "$f"; return 0
 				fi
 			done
 		done
 	elif [ "$mgr" = 'rpm' ]; then
-		if rpm -q --changelog "$name" 2>/dev/null | head -80 | grep -qiE 'CVE-2026-10961[89]'; then
+		# 同上：rpm 的 --changelog 更要全量看，发行版补丁记录按时间倒序堆几千行。
+		if rpm -q --changelog "$name" 2>/dev/null | grep -qiE 'CVE-2026-10961[89]'; then
 			printf 'rpm-changelog:%s\n' "$name"; return 0
 		fi
 	fi
