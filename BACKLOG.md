@@ -21,6 +21,15 @@
 
 ## 候选
 
+### SCAN-HANG · 默认扫描路径不退出（没有真实 webroot 时挂死）
+- files: `audit.sh`（`scan_lfi_sinks` / `collect_webroots` 调用链）
+- value: 高
+- size: M
+- status: open
+- why: `./audit.sh --no-docker --root /tmp/nonexistent` 会打印完整报告，然后**进程不退出**——`timeout 12` 必得 124。加 `--no-scan` 秒退（exit 2）。**自检第 9 节正是跑这一条，所以 `lab/selftest.sh` 每次都停在那里，31 条只能跑到 9 条**，README/SELF-TEST 里的「31 PASS / 0 FAIL」因此无法复验。扫描器挂死比报空更糟：调用方拿不到退出码，分不清「跑完了没问题」和「卡住了」。
+- verify: `timeout 12 ./audit.sh --no-docker --root /tmp/nonexistent; echo $?` 现在得 124，改后应得 2；再跑 `cd lab && ./selftest.sh` 应能跑满 31 条并打出最终统计。
+- note: 已排除的假设——① 不是今天 `eeb7e2d` 引入：`git show dad4460:audit.sh` 与 `28e5e58:audit.sh` 两版同样 124；② 不是假 php：换真 php 一样卡；③ 不是 EXIT trap 的 `rm -rf`：手动删同目录 0.005s；④ 不是 cwd：repo 根 / `/tmp` / `lab` 三处一样卡。
+
 ### LFI-CHAIN-MULTIHOP · 追一层变量赋值链（v0.2 第一刀）
 - files: `audit.sh:962`
 - value: 高
