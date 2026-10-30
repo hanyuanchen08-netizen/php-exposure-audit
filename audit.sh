@@ -972,6 +972,21 @@ scan_lfi_sinks() {
 						[ -z "$vname" ] && continue
 						taint=$(printf '%s' "$vname" | sed 's/^\$//')
 						src=$(grep -nE "\\\$$taint[[:space:]]*=[^=].*\\\$_(GET|POST|REQUEST|COOKIE|FILES)" "$f" 2>/dev/null | head -1)
+						# 一跳中转：$a=$_GET['f']; $b=$a; include $b;
+						# 真实站点里最常见的写法就是这个，只认直接赋值会漏掉整整一类。
+						# 只多追一层：再深就该上数据流分析了，静态扫描追不完，也不该假装追得完。
+						if [ -z "$src" ]; then
+							local hop other oname
+							hop=$(grep -nE "\\\$$taint[[:space:]]*=[[:space:]]*\\\$[A-Za-z_][A-Za-z0-9_]*[[:space:]]*;" "$f" 2>/dev/null | head -1)
+							if [ -n "$hop" ]; then
+								other=$(printf '%s' "$hop" | sed -nE 's/.*=[[:space:]]*(\$[A-Za-z_][A-Za-z0-9_]*)[[:space:]]*;.*/\1/p' | head -1)
+								if [ -n "$other" ]; then
+									oname=$(printf '%s' "$other" | sed 's/^\$//')
+									src=$(grep -nE "\\\$$oname[[:space:]]*=[^=].*\\\$_(GET|POST|REQUEST|COOKIE|FILES)" "$f" 2>/dev/null | head -1)
+									[ -n "$src" ] && src="$(printf '%s' "$hop" | sed 's/^[[:space:]]*//' | cut -c1-50)  →  $src"
+								fi
+							fi
+						fi
 						[ -z "$src" ] && continue
 						printf '%s\t%s\tindirect(%s)\t%s\n' "$f" "$ln" "$vname" \
 							"$(printf '%s' "$line" | sed 's/^[[:space:]]*//' | cut -c1-110) <= $(printf '%s' "$src" | cut -c1-80)"
