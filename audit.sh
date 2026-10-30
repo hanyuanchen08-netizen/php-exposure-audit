@@ -454,7 +454,13 @@ collect_webroots() {
 	{
 		printf '%s\n' /var/www/html /var/www /usr/share/nginx/html /srv/www /data/www
 		ls -d /www/wwwroot/* 2>/dev/null
-		ls -d /home/*/public_html 2>/dev/null
+		# macOS 的 /home 挂在 autofs 上（/etc/auto_master: auto_home -nobrowse），
+		# 对 /home/* 做 glob 会触发 automounter 并长时间阻塞——实测 5 秒不返回，
+		# 整个扫描因此卡在这一行、进程不退出。Linux 目标机的 /home 是普通目录，
+		# 所以只在这类系统上做这个 glob。
+		if [ "$(uname -s 2>/dev/null)" != 'Darwin' ]; then
+			ls -d /home/*/public_html 2>/dev/null
+		fi
 		ls -d /var/www/vhosts/*/httpdocs 2>/dev/null
 		# apache DocumentRoot
 		if have apache2ctl; then apache2ctl -S 2>/dev/null | sed -n 's/.*documentroot: *//Ip'; fi
